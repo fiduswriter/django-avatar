@@ -42,11 +42,11 @@ def avatar_path_handler(
         # Filename already stored in database
         filename = instance.avatar.name
         if ext:
-            (root, oldext) = os.path.splitext(filename)
+            root, oldext = os.path.splitext(filename)
             filename = root + "." + ext.lower()
     else:
         # File doesn't exist yet
-        (root, oldext) = os.path.splitext(filename)
+        root, oldext = os.path.splitext(filename)
         if settings.AVATAR_HASH_FILENAMES:
             if settings.AVATAR_RANDOMIZE_HASHES:
                 root = binascii.hexlify(os.urandom(16)).decode("ascii")
