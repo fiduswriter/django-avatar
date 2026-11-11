@@ -1,5 +1,13 @@
 Changelog
 =========
+* 10.0.0
+    * Avatars can now be attached to model instances other than the user model (#89). ``Avatar.user`` became nullable and the new ``content_type``/``object_id`` fields hold avatars of any other model. Template tags, utility functions, forms, providers and admin all accept any model instance, and the new views ``avatar:add_object``, ``avatar:change_object`` and ``avatar:delete_object`` let them be managed through the web. See the "Avatars for other models" section of the documentation.
+    * Added ``LinkAvatarProvider``, which renders a link stored on the user or model instance (for example a profile image URL obtained from a third party login) instead of an uploaded image, and which is now part of the default ``AVATAR_PROVIDERS``. The name of the field holding the link is configured with ``AVATAR_LINK_FIELD`` (#41).
+    * Added ``AvatarListField`` and ``AvatarUrlField`` for serializing avatar data along with users or other models in Django REST Framework serializers (#247).
+    * Changed: The shipped templates now post to the ``add_url``/``change_url``/``delete_url`` context variables instead of the hardcoded user view urls, so the same templates work for the new object avatar views. Custom avatar templates (``AVATAR_ADD_TEMPLATE`` and friends) keep working unchanged, but do not support the object views until they use these context variables: used on an object page they would otherwise post to the requesting user's avatar instead of the object's.
+    * Fixed: The ``avatar.api`` application was unusable: installing it raised an ``ImportError`` at startup, and not installing it meant its ``API_AVATAR_CHANGE_IMAGE`` setting was never registered, so ``PUT`` requests raised an ``AttributeError``. It is now installed as ``avatar.api`` (see the documentation). It remains optional for users who do not use the API.
+    * Changed: When the primary avatar of a user is deleted, the new primary avatar is selected by date of upload, consistent with the fallback behavior of ``get_primary_avatar``.
+
 * 9.0.0
     * Fix files not closed in `create_thumbnail`
     * Add Django 5.2 and 6.0 support

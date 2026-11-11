@@ -6,20 +6,33 @@ from shutil import rmtree
 from unittest import skipIf
 
 from django.contrib.admin.sites import AdminSite
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.core import management
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
 from PIL import Image, ImageChops
+from rest_framework import serializers as drf_serializers
 
 from avatar.admin import AvatarAdmin
+from avatar.api.serializers import AvatarListField, AvatarUrlField
 from avatar.conf import settings
 from avatar.models import Avatar
+from avatar.providers import (
+    GravatarAvatarProvider,
+    LibRAvatarProvider,
+    LinkAvatarProvider,
+)
 from avatar.signals import avatar_deleted
 from avatar.templatetags import avatar_tags
 from avatar.utils import (
+    get_avatars,
     get_cache_key,
+    get_default_avatar_url,
     get_primary_avatar,
     get_user_model,
     invalidate_cache,
@@ -243,7 +256,7 @@ class AvatarTests(TestCase):
         primaries = Avatar.objects.filter(user=self.user, primary=True)
         self.assertEqual(len(primaries), 1)
         self.assertNotEqual(oid, primaries[0].id)
-        avatars = Avatar.objects.filter(user=self.user)
+        avatars = get_avatars(self.user)
         self.assertEqual(avatars[0].id, primaries[0].id)
 
     def test_change_avatar_get(self):
@@ -546,3 +559,279 @@ class AvatarTests(TestCase):
         sizes = cache.get(sizes_key, set())
         # It should now be empty again
         self.assertEqual(len(sizes), 0)
+
+
+class UserWithAvatarsSerializer(drf_serializers.ModelSerializer):
+    avatars = AvatarListField(width=100, height=50)
+    avatar_url = AvatarUrlField(width=100, height=50)
+
+    class Meta:
+        model = get_user_model()
+        fields = ("username", "avatars", "avatar_url")
+
+
+class ObjectAvatarMixin:
+    """Shared setup for avatars attached to non-user model instances."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.path = os.path.dirname(__file__)
+        cls.testdatapath = os.path.join(cls.path, "data")
+        cls.testmediapath = os.path.join(cls.path, "../test-media/")
+        return super().setUpClass()
+
+    def setUp(self):
+        cache.clear()
+        self.user = get_user_model().objects.create_user(
+            "test", "lennon@thebeatles.com", "testpassword"
+        )
+        self.staff_user = get_user_model().objects.create_user(
+            "stafftest", "staff@example.com", "staffpassword", is_staff=True
+        )
+        self.client.login(username="test", password="testpassword")
+        self.site = Site.objects.get_current()
+        Image.init()
+
+    def tearDown(self):
+        if os.path.exists(self.testmediapath):
+            rmtree(self.testmediapath)
+        return super().tearDown()
+
+    def create_object_avatar(self, obj, filename="test.png", primary=True):
+        avatar = Avatar(primary=primary)
+        avatar.set_owner(obj)
+        with open(os.path.join(self.testdatapath, filename), "rb") as f:
+            avatar.avatar.save(filename, File(f))
+        avatar.save()
+        return avatar
+
+
+class GenericObjectAvatarTests(ObjectAvatarMixin, TestCase):
+    def test_avatar_can_be_attached_to_another_model(self):
+        avatar = self.create_object_avatar(self.site)
+        self.assertIsNone(avatar.user)
+        self.assertEqual(avatar.owner, self.site)
+        stored = Avatar.objects.get(pk=avatar.pk)
+        self.assertEqual(stored.content_object, self.site)
+        self.assertEqual(stored.owner, self.site)
+        self.assertEqual(get_primary_avatar(self.site), avatar)
+
+    def test_avatar_requires_an_owner(self):
+        avatar = Avatar(primary=True)
+        with self.assertRaises(ValidationError):
+            avatar.save()
+
+    def test_avatar_cannot_have_two_owners(self):
+        avatar = Avatar(primary=True, user=self.user)
+        avatar.content_type = ContentType.objects.get_for_model(Site)
+        avatar.object_id = str(self.site.pk)
+        with self.assertRaises(ValidationError):
+            avatar.full_clean()
+
+    def test_set_owner_on_user_clears_object_fields(self):
+        avatar = Avatar(primary=True)
+        avatar.set_owner(self.site)
+        avatar.set_owner(self.user)
+        self.assertEqual(avatar.user, self.user)
+        self.assertIsNone(avatar.content_type)
+        self.assertIsNone(avatar.object_id)
+
+    def test_one_primary_avatar_per_object(self):
+        first = self.create_object_avatar(self.site, filename="test.png")
+        second = self.create_object_avatar(self.site, filename="django.png")
+        self.assertEqual(get_avatars(self.site).filter(primary=True).count(), 1)
+        self.assertEqual(get_primary_avatar(self.site), second)
+        self.assertFalse(Avatar.objects.get(pk=first.pk).primary)
+
+    def test_object_avatar_paths_do_not_collide_with_user_paths(self):
+        user_avatar = self.create_object_avatar(self.user, filename="test.png")
+        site_avatar = self.create_object_avatar(self.site, filename="test.png")
+        self.assertNotEqual(user_avatar.avatar.name, site_avatar.avatar.name)
+        self.assertTrue(
+            user_avatar.avatar.name.startswith("avatars/%s/" % self.user.pk)
+        )
+        self.assertIn("sites_site-%s" % self.site.pk, site_avatar.avatar.name)
+
+    def test_object_add_view_requires_permission(self):
+        url = reverse(
+            "avatar:add_object",
+            kwargs={
+                "app_label": "sites",
+                "model_name": "site",
+                "object_pk": self.site.pk,
+            },
+        )
+        with open(os.path.join(self.testdatapath, "test.png"), "rb") as f:
+            response = self.client.post(url, {"avatar": f})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(get_avatars(self.site).count(), 0)
+
+    def test_object_add_view_staff_upload(self):
+        self.client.login(username="stafftest", password="staffpassword")
+        url = reverse(
+            "avatar:add_object",
+            kwargs={
+                "app_label": "sites",
+                "model_name": "site",
+                "object_pk": self.site.pk,
+            },
+        )
+        with open(os.path.join(self.testdatapath, "test.png"), "rb") as f:
+            response = self.client.post(url, {"avatar": f})
+        self.assertEqual(response.status_code, 302)
+        avatars = get_avatars(self.site)
+        self.assertEqual(avatars.count(), 1)
+        self.assertTrue(avatars[0].primary)
+        self.assertIsNone(avatars[0].user)
+
+    def test_object_change_and_delete_views(self):
+        self.client.login(username="stafftest", password="staffpassword")
+        first = self.create_object_avatar(self.site, filename="test.png")
+        second = self.create_object_avatar(
+            self.site, filename="django.png", primary=False
+        )
+        kwargs = {
+            "app_label": "sites",
+            "model_name": "site",
+            "object_pk": self.site.pk,
+        }
+        response = self.client.post(
+            reverse("avatar:change_object", kwargs=kwargs),
+            {"choice": second.pk},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Avatar.objects.get(pk=second.pk).primary)
+        self.assertFalse(Avatar.objects.get(pk=first.pk).primary)
+
+        response = self.client.post(
+            reverse("avatar:delete_object", kwargs=kwargs),
+            {"choices": [second.pk]},
+        )
+        self.assertEqual(response.status_code, 302)
+        remaining = get_avatars(self.site)
+        self.assertEqual(remaining.count(), 1)
+        self.assertEqual(remaining[0].pk, first.pk)
+
+    def test_unknown_model_object_view_404(self):
+        self.client.login(username="stafftest", password="staffpassword")
+        url = reverse(
+            "avatar:add_object",
+            kwargs={
+                "app_label": "nosuchapp",
+                "model_name": "nosuchmodel",
+                "object_pk": "1",
+            },
+        )
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_avatar_tag_renders_object_avatar(self):
+        avatar = self.create_object_avatar(self.site)
+        result = avatar_tags.avatar(self.site, 80)
+        self.assertIn('<img src="%s"' % avatar.avatar_url(80), result)
+        self.assertIn('width="80" height="80" alt="Avatar" />', result)
+
+    def test_primary_avatar_tag_for_object(self):
+        avatar = self.create_object_avatar(self.site)
+        result = avatar_tags.primary_avatar(self.site)
+        self.assertIn('<img src="%s"' % avatar.avatar_url(80), result)
+
+    def test_has_avatar_for_object(self):
+        self.assertFalse(avatar_tags.has_avatar(self.site))
+        self.create_object_avatar(self.site)
+        self.assertTrue(avatar_tags.has_avatar(self.site))
+
+    def test_admin_owner_column(self):
+        avatar = self.create_object_avatar(self.site)
+        aa = AvatarAdmin(Avatar, AdminSite())
+        self.assertEqual(aa.owner(avatar), str(self.site))
+
+
+class LinkAvatarProviderTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.site = Site.objects.get_current()
+
+    def test_link_provider_returns_stored_link(self):
+        self.site.name = "https://example.com/logo.png"
+        with override_settings(AVATAR_LINK_FIELD="name"):
+            url = LinkAvatarProvider.get_avatar_url(self.site, 80)
+        self.assertEqual(url, "https://example.com/logo.png")
+
+    def test_link_provider_none_without_field(self):
+        self.site.name = "https://example.com/logo.png"
+        self.assertIsNone(LinkAvatarProvider.get_avatar_url(self.site, 80))
+
+    def test_stored_link_for_user(self):
+        user = get_user_model().objects.create_user(
+            "linkuser", "link@example.com", "password"
+        )
+        user.first_name = " https://example.com/profile.png "
+        with override_settings(AVATAR_LINK_FIELD="first_name"):
+            url = LinkAvatarProvider.get_avatar_url(user, 80)
+        self.assertEqual(url, "https://example.com/profile.png")
+
+    def test_avatar_tag_uses_stored_link(self):
+        self.site.name = "https://example.com/logo.png"
+        with override_settings(AVATAR_LINK_FIELD="name"):
+            result = avatar_tags.avatar(self.site, 80)
+        self.assertIn('<img src="https://example.com/logo.png"', result)
+
+    def test_uploaded_avatar_takes_precedence_over_link(self):
+        avatar = Avatar(primary=True)
+        avatar.set_owner(self.site)
+        with open(
+            os.path.join(os.path.dirname(__file__), "data", "test.png"), "rb"
+        ) as f:
+            avatar.avatar.save("test.png", File(f))
+        avatar.save()
+        try:
+            self.site.name = "https://example.com/logo.png"
+            with override_settings(AVATAR_LINK_FIELD="name"):
+                url = avatar_tags.avatar_url(self.site, 80)
+            self.assertEqual(url, avatar.avatar_url(80))
+        finally:
+            avatar.delete()
+
+    def test_gravatar_and_libravatar_return_none_without_email_field(self):
+        self.assertIsNone(GravatarAvatarProvider.get_avatar_url(self.site, 80))
+        self.assertIsNone(LibRAvatarProvider.get_avatar_url(self.site, 80))
+
+
+class AvatarSerializationTests(ObjectAvatarMixin, TestCase):
+    def test_avatars_serialized_along_with_user(self):
+        avatar = self.create_object_avatar(self.user, filename="test.png")
+        data = UserWithAvatarsSerializer(self.user).data
+        self.assertEqual(len(data["avatars"]), 1)
+        entry = data["avatars"][0]
+        self.assertEqual(entry["id"], avatar.pk)
+        self.assertTrue(entry["primary"])
+        self.assertEqual(entry["url"], avatar.avatar_url(100, 50))
+        self.assertTrue(entry["date_uploaded"])
+        self.assertEqual(data["avatar_url"], avatar.avatar_url(100, 50))
+
+    def test_multiple_avatars_keep_primary_first(self):
+        self.create_object_avatar(self.user, filename="django.png", primary=False)
+        primary = self.create_object_avatar(self.user, filename="test.png")
+        data = UserWithAvatarsSerializer(self.user).data
+        self.assertEqual(len(data["avatars"]), 2)
+        self.assertEqual(data["avatars"][0]["id"], primary.pk)
+        self.assertTrue(data["avatars"][0]["primary"])
+        self.assertFalse(data["avatars"][1]["primary"])
+
+    def test_serializer_without_avatars(self):
+        data = UserWithAvatarsSerializer(self.user).data
+        self.assertEqual(data["avatars"], [])
+        self.assertEqual(data["avatar_url"], get_default_avatar_url())
+
+    def test_avatars_serialized_along_with_other_model(self):
+        class SiteSerializer(drf_serializers.ModelSerializer):
+            avatars = AvatarListField()
+
+            class Meta:
+                model = Site
+                fields = ("domain", "avatars")
+
+        avatar = self.create_object_avatar(self.site)
+        data = SiteSerializer(self.site).data
+        self.assertEqual(len(data["avatars"]), 1)
+        self.assertEqual(data["avatars"][0]["id"], avatar.pk)

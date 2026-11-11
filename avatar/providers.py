@@ -26,40 +26,66 @@ class DefaultAvatarProvider(object):
     """
 
     @classmethod
-    def get_avatar_url(cls, user, width, height=None):
+    def get_avatar_url(cls, obj, width, height=None):
         return get_default_avatar_url()
 
 
 class PrimaryAvatarProvider(object):
     """
-    Returns the primary Avatar from the users avatar set.
+    Returns the primary Avatar from the avatar set of the given user or
+    model instance.
     """
 
     @classmethod
-    def get_avatar_url(cls, user, width, height=None):
+    def get_avatar_url(cls, obj, width, height=None):
         if not height:
             height = width
-        avatar = get_primary_avatar(user, width, height)
+        avatar = get_primary_avatar(obj, width, height)
         if avatar:
             return avatar.avatar_url(width, height)
+
+
+class LinkAvatarProvider(object):
+    """
+    Returns a link stored on the user or model instance itself, for example
+    the URL of a profile image obtained from a third party authentication
+    service. Instead of uploading an image, only the link to the image is
+    stored. The field holding the link is named according to
+    ``settings.AVATAR_LINK_FIELD`` (default: ``avatar_link``).
+
+    Avatars attached to the user or model instance (i.e. stored ``Avatar``
+    instances) take precedence over stored links, unless the providers are
+    reordered in ``settings.AVATAR_PROVIDERS``.
+    """
+
+    @classmethod
+    def get_avatar_url(cls, obj, width, height=None):
+        link = getattr(obj, settings.AVATAR_LINK_FIELD, None)
+        if not link:
+            return None
+        return str(link).strip()
 
 
 class GravatarAvatarProvider(object):
     """
     Returns the url for an avatar by the Gravatar service.
+
+    Returns ``None`` if the given user or model instance has no field named
+    according to ``settings.AVATAR_GRAVATAR_FIELD``.
     """
 
     @classmethod
-    def get_avatar_url(cls, user, width, _height=None):
+    def get_avatar_url(cls, obj, width, _height=None):
+        email = getattr(obj, settings.AVATAR_GRAVATAR_FIELD, None)
+        if email is None:
+            return None
         params = {"s": str(width)}
         if settings.AVATAR_GRAVATAR_DEFAULT:
             params["d"] = settings.AVATAR_GRAVATAR_DEFAULT
         if settings.AVATAR_GRAVATAR_FORCEDEFAULT:
             params["f"] = "y"
         path = "%s/?%s" % (
-            hashlib.md5(
-                force_bytes(getattr(user, settings.AVATAR_GRAVATAR_FIELD))
-            ).hexdigest(),
+            hashlib.md5(force_bytes(email)).hexdigest(),
             urlencode(params),
         )
 
@@ -69,11 +95,17 @@ class GravatarAvatarProvider(object):
 class LibRAvatarProvider:
     """
     Returns the url of an avatar by the LibRavatar service.
+
+    Returns ``None`` if the given user or model instance has no field named
+    according to ``settings.AVATAR_GRAVATAR_FIELD``.
     """
 
     @classmethod
-    def get_avatar_url(cls, user, width, _height=None):
-        email = getattr(user, settings.AVATAR_GRAVATAR_FIELD).encode("utf-8")
+    def get_avatar_url(cls, obj, width, _height=None):
+        email = getattr(obj, settings.AVATAR_GRAVATAR_FIELD, None)
+        if email is None:
+            return None
+        email = email.encode("utf-8")
         try:
             _, domain = email.split(b"@")
             answers = dns.resolver.query("_avatars._tcp." + domain, "SRV")
@@ -106,10 +138,10 @@ class FacebookAvatarProvider(object):
     """
 
     @classmethod
-    def get_avatar_url(cls, user, width, height=None):
+    def get_avatar_url(cls, obj, width, height=None):
         if not height:
             height = width
-        fb_id = get_facebook_id(user)
+        fb_id = get_facebook_id(obj)
         if fb_id:
             url = "https://graph.facebook.com/{fb_id}/picture?type=square&width={width}&height={height}"
             return url.format(fb_id=fb_id, width=width, height=height)
@@ -117,20 +149,26 @@ class FacebookAvatarProvider(object):
 
 class InitialsAvatarProvider(object):
     """
-    Returns a tuple with template_name and context for rendering the given user's avatar as their
-    initials in white against a background with random hue based on their primary key.
+    Returns a tuple with template_name and context for rendering the given
+    user's or model instance's avatar as their initials in white against a
+    background with random hue based on their primary key.
     """
 
     @classmethod
-    def get_avatar_url(cls, user, width, _height=None):
-        initials = user.first_name[:1] + user.last_name[:1]
+    def get_avatar_url(cls, obj, width, _height=None):
+        initials = (
+            getattr(obj, "first_name", "")[:1] + getattr(obj, "last_name", "")[:1]
+        )
         if not initials:
-            initials = user.username[:1]
+            if hasattr(obj, "username"):
+                initials = obj.username[:1]
+            else:
+                initials = str(obj)[:1]
         initials = initials.upper()
         context = {
             "fontsize": (width * 1.1) / 2,
             "initials": initials,
-            "hue": user.pk % 360,
+            "hue": obj.pk % 360,
             "saturation": "65%",
             "lightness": "60%",
         }

@@ -7,14 +7,14 @@
     {% if not avatars %}
         <p>{% trans "You haven't uploaded an avatar yet. Please upload one now." %}</p>
     {% else %}
-        <form method="POST" action="{% url 'avatar:change' %}">
+        <form method="POST" action="{{ change_url }}">
             <ul>
                 {{ primary_avatar_form.as_ul }}
             </ul>
             <p>{% csrf_token %}<input type="submit" value="{% trans "Choose new Default" %}" /></p>
         </form>
     {% endif %}
-    <form enctype="multipart/form-data" method="POST" action="{% url 'avatar:add' %}">
+    <form enctype="multipart/form-data" method="POST" action="{{ add_url }}">
         {{ upload_avatar_form.as_p }}
         <p>{% csrf_token %}<input type="submit" value="{% trans "Upload New Image" %}" /></p>
     </form>

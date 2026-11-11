@@ -1,9 +1,11 @@
 import hashlib
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
+from django.db import models as db_models
 from django.template.defaultfilters import slugify
-from django.utils.encoding import force_bytes
+from django.utils.encoding import force_bytes, force_str
 
 from avatar.conf import settings
 
@@ -32,13 +34,64 @@ def get_user(userdescriptor):
     return User.objects.get_by_natural_key(userdescriptor)
 
 
-def get_cache_key(user_or_username, prefix, width=None, height=None):
+def is_object_instance(obj):
     """
-    Returns a cache key consisten of a username and image size.
+    True if ``obj`` is a model instance other than an instance of the user
+    model. Avatars can be attached to users and to any other model instance.
     """
-    if isinstance(user_or_username, get_user_model()):
-        user_or_username = get_username(user_or_username)
-    key = f"{prefix}_{user_or_username}"
+    return isinstance(obj, db_models.Model) and not isinstance(obj, get_user_model())
+
+
+def get_object_identifier(obj):
+    """
+    Returns a stable string for identifying a user or an arbitrary model
+    instance in cache keys and, for users, when usernames are exposed.
+    Users are identified by their username, other model instances by their
+    app label, model name and primary key.
+    """
+    if isinstance(obj, get_user_model()):
+        return get_username(obj)
+    if isinstance(obj, db_models.Model):
+        opts = obj._meta
+        return "%s.%s-%s" % (opts.app_label, opts.model_name, obj.pk)
+    return obj
+
+
+def get_object_directory_name(obj):
+    """
+    Returns the name of the storage directory used for the avatars of a user
+    or of an arbitrary model instance. The naming schemes for users and for
+    other model instances cannot collide.
+    """
+    if isinstance(obj, get_user_model()):
+        return force_str(obj.pk)
+    opts = obj._meta
+    return "%s_%s-%s" % (opts.app_label, opts.model_name, obj.pk)
+
+
+def get_avatars(obj):
+    """
+    Returns the avatars attached to a user or to any other model instance,
+    ordered by the primary avatar first and then by most recent upload.
+    """
+    from avatar.models import Avatar  # avoid a circular import at module level
+
+    if is_object_instance(obj):
+        content_type = ContentType.objects.get_for_model(obj)
+        return Avatar.objects.filter(
+            content_type=content_type, object_id=str(obj.pk)
+        ).order_by("-primary", "-date_uploaded")
+    return obj.avatar_set.order_by("-primary", "-date_uploaded")
+
+
+def get_cache_key(user_or_obj, prefix, width=None, height=None):
+    """
+    Returns a cache key consisten of a username or model instance identifier
+    and image size.
+    """
+    if isinstance(user_or_obj, db_models.Model):
+        user_or_obj = get_object_identifier(user_or_obj)
+    key = f"{prefix}_{user_or_obj}"
     if width:
         key += f"_{width}"
     if height or width:
@@ -126,20 +179,20 @@ def get_default_avatar_url():
 
 
 def get_primary_avatar(user, width=settings.AVATAR_DEFAULT_SIZE, height=None):
-    User = get_user_model()
-    if not isinstance(user, User):
-        try:
-            user = get_user(user)
-        except User.DoesNotExist:
-            return None
-    try:
+    if is_object_instance(user):
+        avatar = get_avatars(user).first()
+    else:
+        User = get_user_model()
+        if not isinstance(user, User):
+            try:
+                user = get_user(user)
+            except User.DoesNotExist:
+                return None
         # Order by -primary first; this means if a primary=True avatar exists
         # it will be first, and then ordered by date uploaded, otherwise a
         # primary=False avatar will be first.  Exactly the fallback behavior we
         # want.
-        avatar = user.avatar_set.order_by("-primary", "-date_uploaded")[0]
-    except IndexError:
-        avatar = None
+        avatar = get_avatars(user).first()
     if avatar:
         if not avatar.thumbnail_exists(width, height):
             avatar.create_thumbnail(width, height)

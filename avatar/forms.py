@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from PIL import Image, ImageOps
 
 from avatar.conf import settings
-from avatar.models import Avatar
+from avatar.utils import get_avatars
 
 
 def avatar_img(avatar, width, height):
@@ -24,6 +24,7 @@ class UploadAvatarForm(forms.Form):
     avatar = forms.ImageField(label=_("avatar"))
 
     def __init__(self, *args, **kwargs):
+        # The user or model instance the avatar should be attached to.
         self.user = kwargs.pop("user")
         super().__init__(*args, **kwargs)
 
@@ -89,7 +90,7 @@ class UploadAvatarForm(forms.Form):
         except TypeError:
             raise forms.ValidationError(_("Corrupted image"))
 
-        count = Avatar.objects.filter(user=self.user).count()
+        count = get_avatars(self.user).count()
         if 1 < settings.AVATAR_MAX_AVATARS_PER_USER <= count:
             error = _(
                 "You already have %(nb_avatars)d avatars, "
@@ -107,6 +108,7 @@ class UploadAvatarForm(forms.Form):
 
 class PrimaryAvatarForm(forms.Form):
     def __init__(self, *args, **kwargs):
+        # The user or model instance the avatars belong to.
         kwargs.pop("user")
         width = kwargs.pop("width", settings.AVATAR_DEFAULT_SIZE)
         height = kwargs.pop("height", settings.AVATAR_DEFAULT_SIZE)
@@ -120,6 +122,7 @@ class PrimaryAvatarForm(forms.Form):
 
 class DeleteAvatarForm(forms.Form):
     def __init__(self, *args, **kwargs):
+        # The user or model instance the avatars belong to.
         kwargs.pop("user")
         width = kwargs.pop("width", settings.AVATAR_DEFAULT_SIZE)
         height = kwargs.pop("height", settings.AVATAR_DEFAULT_SIZE)

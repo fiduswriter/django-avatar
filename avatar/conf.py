@@ -35,8 +35,15 @@ class AvatarConf(AppConf):
     ADD_TEMPLATE = ""
     CHANGE_TEMPLATE = ""
     DELETE_TEMPLATE = ""
+    # Field on a user or model instance that holds a stored avatar link
+    # (e.g. a profile image URL obtained from a third party login).
+    LINK_FIELD = "avatar_link"
+    # Callable taking (request, obj) and returning whether the request may
+    # manage the avatars of the non-user object ``obj``.
+    OBJECT_PERMISSION = "avatar.views.default_object_permission"
     PROVIDERS = (
         "avatar.providers.PrimaryAvatarProvider",
+        "avatar.providers.LinkAvatarProvider",
         "avatar.providers.LibRAvatarProvider",
         "avatar.providers.GravatarAvatarProvider",
         "avatar.providers.DefaultAvatarProvider",

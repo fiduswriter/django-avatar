@@ -1,12 +1,19 @@
 from django import template
+from django.db import models as db_models
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext as _
 
 from avatar.conf import settings
-from avatar.models import Avatar
-from avatar.utils import cache_result, get_default_avatar_url, get_user, get_user_model
+from avatar.utils import (
+    cache_result,
+    get_avatars,
+    get_default_avatar_url,
+    get_user,
+    get_user_model,
+    is_object_instance,
+)
 
 register = template.Library()
 
@@ -29,7 +36,13 @@ def avatar_url(user, width=settings.AVATAR_DEFAULT_SIZE, height=None):
 def avatar(user, width=settings.AVATAR_DEFAULT_SIZE, height=None, **kwargs):
     if height is None:
         height = width
-    if not isinstance(user, get_user_model()):
+    if is_object_instance(user):
+        if settings.AVATAR_EXPOSE_USERNAMES:
+            alt = str(user)
+        else:
+            alt = _("Avatar")
+        url = avatar_url(user, width, height)
+    elif not isinstance(user, get_user_model()):
         try:
             user = get_user(user)
             if settings.AVATAR_EXPOSE_USERNAMES:
@@ -68,9 +81,9 @@ def avatar(user, width=settings.AVATAR_DEFAULT_SIZE, height=None, **kwargs):
 
 @register.filter
 def has_avatar(user):
-    if not isinstance(user, get_user_model()):
+    if not isinstance(user, db_models.Model):
         return False
-    return Avatar.objects.filter(user=user, primary=True).exists()
+    return get_avatars(user).filter(primary=True).exists()
 
 
 @cache_result()
@@ -81,7 +94,25 @@ def primary_avatar(user, width=settings.AVATAR_DEFAULT_SIZE, height=None):
     requests. It achieve this by linking to a special view that will do all the
     work for us. If that special view is then cached by a CDN for instance,
     we will avoid many db calls.
+
+    For avatars attached to models other than the user model the avatar URL
+    is rendered directly instead.
     """
+    explicit_height = height is not None
+    if height is None:
+        height = width
+    if is_object_instance(user):
+        if settings.AVATAR_EXPOSE_USERNAMES:
+            alt = str(user)
+        else:
+            alt = _("Avatar")
+        url = avatar_url(user, width, height)
+        return """<img src="%s" width="%s" height="%s" alt="%s" />""" % (
+            url,
+            width,
+            height,
+            alt,
+        )
     kwargs = {"width": width}
     if settings.AVATAR_EXPOSE_USERNAMES:
         alt = str(user)
@@ -89,9 +120,7 @@ def primary_avatar(user, width=settings.AVATAR_DEFAULT_SIZE, height=None):
     else:
         alt = _("User Avatar")
         kwargs["user"] = user.id
-    if height is None:
-        height = width
-    else:
+    if explicit_height:
         kwargs["height"] = height
 
     url = reverse("avatar:render_primary", kwargs=kwargs)
