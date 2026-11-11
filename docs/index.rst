@@ -88,12 +88,14 @@ template rendering system::
 
 ``{% avatar_url user [size in pixels] %}``
     Renders the URL of the avatar for the given user. User can be either a
-    ``django.contrib.auth.models.User`` object instance or a username.
+    ``django.contrib.auth.models.User`` object instance, a username, or a
+    model instance that avatars are attached to.
 
 ``{% avatar user [size in pixels] **kwargs %}``
-    Renders an HTML ``img`` tag for the given user for the specified size. User
-    can be either a ``django.contrib.auth.models.User`` object instance or a
-    username. The (key, value) pairs in kwargs will be added to ``img`` tag
+    Renders an HTML ``img`` tag for the given user for the specified size.
+    User can be either a ``django.contrib.auth.models.User`` object
+    instance, a username, or a model instance that avatars are attached to.
+    The (key, value) pairs in kwargs will be added to ``img`` tag
     as its attributes.
 
 ``{% render_avatar avatar [size in pixels] %}``
@@ -101,7 +103,56 @@ template rendering system::
     ``img`` tag to represent that avatar at the requested size.
 
 ``{{ request.user|has_avatar }}``
-    Given a user object returns a boolean if the user has an avatar.
+    Given a user or a model instance that avatars can be attached to,
+    returns a boolean if it has a primary avatar.
+
+Avatars for other models
+------------------------
+
+Avatars are not limited to the user model. They can also be attached to any
+other model instance, for example to company profiles or teams::
+
+    from avatar.models import Avatar
+
+    avatar = Avatar(primary=True)
+    avatar.set_owner(my_company)
+    with open("logo.png", "rb") as image_file:
+        avatar.avatar.save("logo.png", File(image_file))
+    avatar.save()
+
+The ``Avatar`` model keeps a nullable ``user`` foreign key for user avatars
+and a generic ``content_type``/``object_id`` pair for all other model
+instances. Both are exposed as ``avatar.content_object`` and, whichever of
+the two is set, as ``avatar.owner``.
+
+All template tags, utility functions and providers that work with users work
+with any model instance the same way: ``{% avatar my_company %}``,
+``{% avatar_url my_company 100 %}``, ``{% primary_avatar my_company %}``,
+the ``has_avatar`` filter and ``avatar.utils.get_primary_avatar()``.
+Third-party providers (Gravatar, LibRavatar) are skipped for model
+instances that lack the fields they require, falling through to the next
+provider.
+
+The avatars of another model instance can also be managed through the web
+views::
+
+    {% url 'avatar:add_object' 'myapp' 'company' my_company.pk %}
+    {% url 'avatar:change_object' 'myapp' 'company' my_company.pk %}
+    {% url 'avatar:delete_object' 'myapp' 'company' my_company.pk %}
+
+By default, only staff members may change the avatars of objects other than
+themselves; see :py:data:`AVATAR_OBJECT_PERMISSION` to change this.
+
+When a model instance is deleted, its stored avatars are not deleted
+automatically. To remove them along with the instance, add a generic
+relation to your model::
+
+    from django.contrib.contenttypes.fields import GenericRelation
+
+    from avatar.models import Avatar
+
+    class Company(models.Model):
+        avatars = GenericRelation(Avatar)
 
 Global Settings
 ---------------
@@ -168,6 +219,23 @@ appear on the site. Listed below are those settings:
 
     The maximum number of avatars each user can have. Default is ``42``.
 
+.. py:data:: AVATAR_LINK_FIELD
+
+    The name of the field on a user or model instance that holds a stored
+    link to an avatar image instead of an uploaded file. Used by
+    :py:class:`~avatar.providers.LinkAvatarProvider`. Defaults to
+    ``avatar_link``.
+
+.. py:data:: AVATAR_OBJECT_PERMISSION
+
+    A callable or string path to a callable that takes the ``request`` and
+    the model instance whose avatars are being managed and returns whether
+    the request may manage them. It is used by the object avatar views
+    (``avatar:add_object``, ``avatar:change_object`` and
+    ``avatar:delete_object``). Defaults to
+    ``avatar.views.default_object_permission``, which only allows staff
+    members.
+
 .. py:data:: AVATAR_PATH_HANDLER
 
     Path to a method for avatar file path handling. Default is
@@ -181,6 +249,7 @@ appear on the site. Listed below are those settings:
 
         (
             'avatar.providers.PrimaryAvatarProvider',
+            'avatar.providers.LinkAvatarProvider',
             'avatar.providers.LibRAvatarProvider',
             'avatar.providers.GravatarAvatarProvider',
             'avatar.providers.DefaultAvatarProvider',
@@ -191,13 +260,22 @@ appear on the site. Listed below are those settings:
 
     .. py:class:: avatar.providers.PrimaryAvatarProvider
 
-        Returns the primary avatar stored for the given user.
+        Returns the primary avatar stored for the given user or model
+        instance.
+
+    .. py:class:: avatar.providers.LinkAvatarProvider
+
+        Returns a link stored on the user or model instance itself, for
+        example the URL of a profile image obtained from a third party
+        authentication service. See :py:data:`AVATAR_LINK_FIELD`.
 
     .. py:class:: avatar.providers.GravatarAvatarProvider
 
         Adds support for the Gravatar service and will always return an avatar
-        URL. If the user has no avatar registered with Gravatar a default will
-        be used (see :py:data:`AVATAR_GRAVATAR_DEFAULT`).
+        URL if the given user or model instance has a field named according to
+        :py:data:`AVATAR_GRAVATAR_FIELD`. If the user has no avatar registered
+        with Gravatar a default will be used (see
+        :py:data:`AVATAR_GRAVATAR_DEFAULT`).
 
     .. py:class:: avatar.providers.FacebookAvatarProvider
 
@@ -295,6 +373,7 @@ after `Installation <#installation>`_ .
         INSTALLED_APPS = (
             # ...
             'avatar',
+            'avatar.api',
             'rest_framework'
         )
 
@@ -305,6 +384,34 @@ after `Installation <#installation>`_ .
             # ...
             path('api/', include('avatar.api.urls')),
         ]
+
+-----------------------------------------------
+
+Serializing avatars along with other models
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The read-only fields :py:class:`avatar.api.serializers.AvatarListField` and
+:py:class:`avatar.api.serializers.AvatarUrlField` can be added to your own
+serializers in order to send the avatar data of a user or of any other model
+instance along with its other fields::
+
+    from avatar.api.serializers import AvatarListField, AvatarUrlField
+
+    class UserSerializer(serializers.ModelSerializer):
+        avatars = AvatarListField(width=80, height=80)
+        avatar_url = AvatarUrlField(width=80, height=80)
+
+        class Meta:
+            model = get_user_model()
+            fields = ("username", "avatars", "avatar_url")
+
+The ``avatars`` field lists the full avatar set, primary avatar first. Each
+entry contains the ``id`` of the avatar, the ``url`` of the resized image,
+whether it is the ``primary`` avatar and its ``date_uploaded``. The
+``avatar_url`` field contains the resized URL of the primary avatar, or the
+default avatar URL if there is none. Both fields take optional ``width`` and
+``height`` keyword arguments (defaulting to
+:py:data:`AVATAR_DEFAULT_SIZE`).
 
 -----------------------------------------------
 

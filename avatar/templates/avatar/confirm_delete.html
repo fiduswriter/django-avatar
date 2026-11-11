@@ -3,11 +3,10 @@
 
 {% block content %}
     {% if not avatars %}
-        {% url 'avatar:change' as avatar_change_url %}
-        <p>{% blocktrans %}You have no avatars to delete. Please <a href="{{ avatar_change_url }}">upload one</a> now.{% endblocktrans %}</p>
+        <p>{% blocktrans %}You have no avatars to delete. Please <a href="{{ change_url }}">upload one</a> now.{% endblocktrans %}</p>
     {% else %}
         <p>{% trans "Please select the avatars that you would like to delete." %}</p>
-        <form method="POST" action="{% url 'avatar:delete' %}">
+        <form method="POST" action="{{ delete_url }}">
             <ul>
                 {{ delete_avatar_form.as_ul }}
             </ul>

@@ -8,6 +8,11 @@ from rest_framework import serializers
 from avatar.conf import settings
 from avatar.conf import settings as api_setting
 from avatar.models import Avatar
+from avatar.utils import (
+    get_avatars,
+    get_default_avatar_url,
+    get_primary_avatar,
+)
 
 
 class AvatarSerializer(serializers.ModelSerializer):
@@ -124,3 +129,65 @@ class AvatarSerializer(serializers.ModelSerializer):
                 }
             )
         return data
+
+
+class _AvatarSizedFieldMixin:
+    """
+    Shared width/height handling for the avatar serialization fields.
+    """
+
+    def __init__(self, width=None, height=None, *args, **kwargs):
+        self.width = width or settings.AVATAR_DEFAULT_SIZE
+        self.height = height or self.width
+        # The fields serialize the whole user or model instance they are
+        # declared on, not one of its attributes.
+        kwargs.setdefault("source", "*")
+        super().__init__(*args, **kwargs)
+
+
+class AvatarListField(_AvatarSizedFieldMixin, serializers.SerializerMethodField):
+    """
+    Read-only field that serializes the full list of avatars attached to the
+    user or model instance being serialized, along with its other fields.
+    Each avatar is rendered as a dictionary with its ``id``, the URL of the
+    resized image, whether it is the primary avatar and its upload date.
+
+    Use it in your own serializer::
+
+        class UserSerializer(serializers.ModelSerializer):
+            avatars = AvatarListField(width=80, height=80)
+
+            class Meta:
+                model = get_user_model()
+                fields = ("username", "avatars")
+    """
+
+    def to_representation(self, value):
+        date_field = serializers.DateTimeField()
+        result = []
+        for avatar in get_avatars(value):
+            if not avatar.thumbnail_exists(self.width, self.height):
+                avatar.create_thumbnail(self.width, self.height)
+            result.append(
+                {
+                    "id": avatar.pk,
+                    "url": avatar.avatar_url(self.width, self.height),
+                    "primary": avatar.primary,
+                    "date_uploaded": date_field.to_representation(avatar.date_uploaded),
+                }
+            )
+        return result
+
+
+class AvatarUrlField(_AvatarSizedFieldMixin, serializers.SerializerMethodField):
+    """
+    Read-only field serializing the URL of the primary avatar of the user or
+    model instance being serialized, resized to the given width and height.
+    Falls back to the default avatar URL when no avatar exists.
+    """
+
+    def to_representation(self, value):
+        avatar = get_primary_avatar(value, width=self.width, height=self.height)
+        if avatar:
+            return avatar.avatar_url(self.width, self.height)
+        return get_default_avatar_url()

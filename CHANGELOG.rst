@@ -1,5 +1,14 @@
 Changelog
 =========
+* 10.0.0
+    * Avatars can now be attached to model instances other than the user model (#89). ``Avatar.user`` became nullable and the new ``content_type``/``object_id`` fields hold avatars of any other model. Template tags, utility functions, forms, providers and admin all accept any model instance, and the new views ``avatar:add_object``, ``avatar:change_object`` and ``avatar:delete_object`` let them be managed through the web. See the "Avatars for other models" section of the documentation.
+    * Added ``LinkAvatarProvider``, which renders a link stored on the user or model instance (for example a profile image URL obtained from a third party login) instead of an uploaded image, and which is now part of the default ``AVATAR_PROVIDERS``. The name of the field holding the link is configured with ``AVATAR_LINK_FIELD`` (#41).
+    * Added ``AvatarListField`` and ``AvatarUrlField`` for serializing avatar data along with users or other models in Django REST Framework serializers (#247).
+    * Breaking: The avatar forms now take an ``obj=`` keyword argument instead of ``user=``.
+    * Breaking: The shipped templates now post to the ``add_url``/``change_url``/``delete_url`` context variables. Custom avatar templates should be updated in the same way.
+    * Breaking: The API app must be installed as ``avatar.api`` in ``INSTALLED_APPS``. Its configuration and signals were silently inactive before.
+    * When the primary avatar of a user is deleted, the new primary avatar is selected by date of upload, consistent with the fallback behavior of ``get_primary_avatar``.
+
 * 9.0.0
     * Fix files not closed in `create_thumbnail`
     * Add Django 5.2 and 6.0 support

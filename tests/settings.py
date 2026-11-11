@@ -19,6 +19,8 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sites",
     "avatar",
+    "avatar.api",
+    "rest_framework",
 ]
 
 MIDDLEWARE = (

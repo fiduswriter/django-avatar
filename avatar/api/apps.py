@@ -1,14 +1,14 @@
 from django.apps import AppConfig
 from django.db.models import signals
 
-from avatar.models import Avatar
-
 
 class ApiConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "avatar.api"
 
     def ready(self):
+        from avatar.models import Avatar
+
         from .conf import settings as api_settings
         from .signals import (
             create_default_thumbnails,
