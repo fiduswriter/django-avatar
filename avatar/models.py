@@ -210,7 +210,10 @@ def remove_avatar_images(instance=None, delete_main_avatar=True, **kwargs):
     path, filename = os.path.split(base_filepath)
     # iterate through resized avatars directories and delete resized avatars
     resized_path = os.path.join(path, "resized")
-    resized_widths, _ = instance.avatar.storage.listdir(resized_path)
+    try:
+        resized_widths, _ = instance.avatar.storage.listdir(resized_path)
+    except FileNotFoundError:
+        resized_widths = []
     for width in resized_widths:
         resized_width_path = os.path.join(resized_path, width)
         resized_heights, _ = instance.avatar.storage.listdir(resized_width_path)

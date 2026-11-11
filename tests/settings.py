@@ -50,14 +50,11 @@ SITE_ID = 1
 
 SECRET_KEY = "something-something"
 
-ROOT_URLCONF = "tests.urls"
-
 STATIC_URL = "/site_media/static/"
 
 AVATAR_ALLOWED_FILE_EXTS = (".jpg", ".png")
 AVATAR_MAX_SIZE = 1024 * 1024
 AVATAR_MAX_AVATARS_PER_USER = 20
 AVATAR_AUTO_GENERATE_SIZES = [51, 62, (33, 22), 80]
-
 
 MEDIA_ROOT = os.path.join(SETTINGS_DIR, "../test-media")
