@@ -2,10 +2,6 @@
 django-avatar
 =============
 
-.. image:: https://jazzband.co/static/img/badge.png
-   :target: https://jazzband.co/
-   :alt: Jazzband
-
 .. image:: https://img.shields.io/pypi/pyversions/django-avatar.svg
    :target: https://pypi.org/project/django-avatar/
    :alt: Supported Python versions
@@ -14,11 +10,11 @@ django-avatar
    :target: https://pypi.org/project/django-avatar/
    :alt: Supported Django versions
 
-.. image:: https://github.com/jazzband/django-avatar/actions/workflows/test.yml/badge.svg
-   :target: https://github.com/jazzband/django-avatar/actions/workflows/test.yml
+.. image:: https://github.com/fiduswriter/django-avatar/actions/workflows/test.yml/badge.svg
+   :target: https://github.com/fiduswriter/django-avatar/actions/workflows/test.yml
 
-.. image:: https://codecov.io/gh/jazzband/django-avatar/branch/main/graph/badge.svg?token=BO1e4kkgtq
-   :target: https://codecov.io/gh/jazzband/django-avatar
+.. image:: https://codecov.io/gh/fiduswriter/django-avatar/branch/main/graph/badge.svg?token=BO1e4kkgtq
+   :target: https://codecov.io/gh/fiduswriter/django-avatar
 
 .. image:: https://badge.fury.io/py/django-avatar.svg
     :target: https://badge.fury.io/py/django-avatar
