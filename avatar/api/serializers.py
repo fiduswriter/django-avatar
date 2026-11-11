@@ -43,8 +43,10 @@ class AvatarSerializer(serializers.ModelSerializer):
         # remove avatar field in put method
         if request and getattr(request, "method", None) == "PUT":
             # avatar updates only when primary=true and API_AVATAR_CHANGE_IMAGE = True
+            # the setting default is registered by the optional avatar.api app
+            # configuration, fall back to False when it is not installed
             if (
-                not api_setting.API_AVATAR_CHANGE_IMAGE
+                not getattr(api_setting, "API_AVATAR_CHANGE_IMAGE", False)
                 or self.instance
                 and not self.instance.primary
             ):

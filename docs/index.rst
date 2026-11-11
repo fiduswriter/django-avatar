@@ -385,6 +385,11 @@ after `Installation <#installation>`_ .
             path('api/', include('avatar.api.urls')),
         ]
 
+The API application is optional and only needed for the JSON API endpoints;
+the core application never depends on it. Install it under the name
+``avatar.api``: only then are the ``API_AVATAR_CHANGE_IMAGE`` setting and
+the signal handlers acting on it active.
+
 -----------------------------------------------
 
 Serializing avatars along with other models

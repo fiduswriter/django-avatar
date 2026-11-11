@@ -25,7 +25,7 @@ class UploadAvatarForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         # The user or model instance the avatar should be attached to.
-        self.obj = kwargs.pop("obj")
+        self.user = kwargs.pop("user")
         super().__init__(*args, **kwargs)
 
     def clean_avatar(self):
@@ -90,7 +90,7 @@ class UploadAvatarForm(forms.Form):
         except TypeError:
             raise forms.ValidationError(_("Corrupted image"))
 
-        count = get_avatars(self.obj).count()
+        count = get_avatars(self.user).count()
         if 1 < settings.AVATAR_MAX_AVATARS_PER_USER <= count:
             error = _(
                 "You already have %(nb_avatars)d avatars, "
@@ -108,7 +108,8 @@ class UploadAvatarForm(forms.Form):
 
 class PrimaryAvatarForm(forms.Form):
     def __init__(self, *args, **kwargs):
-        kwargs.pop("obj")
+        # The user or model instance the avatars belong to.
+        kwargs.pop("user")
         width = kwargs.pop("width", settings.AVATAR_DEFAULT_SIZE)
         height = kwargs.pop("height", settings.AVATAR_DEFAULT_SIZE)
         avatars = kwargs.pop("avatars")
@@ -121,7 +122,8 @@ class PrimaryAvatarForm(forms.Form):
 
 class DeleteAvatarForm(forms.Form):
     def __init__(self, *args, **kwargs):
-        kwargs.pop("obj")
+        # The user or model instance the avatars belong to.
+        kwargs.pop("user")
         width = kwargs.pop("width", settings.AVATAR_DEFAULT_SIZE)
         height = kwargs.pop("height", settings.AVATAR_DEFAULT_SIZE)
         avatars = kwargs.pop("avatars")

@@ -135,7 +135,7 @@ def add(
     obj = _resolve_object(request, app_label, model_name, object_pk)
     avatar, avatars = _get_avatars(obj)
     upload_avatar_form = upload_form(
-        request.POST or None, request.FILES or None, obj=obj
+        request.POST or None, request.FILES or None, user=obj
     )
     if request.method == "POST" and "avatar" in request.FILES:
         if upload_avatar_form.is_valid():
@@ -180,9 +180,9 @@ def change(
         kwargs = {"initial": {"choice": avatar.id}}
     else:
         kwargs = {}
-    upload_avatar_form = upload_form(obj=obj, **kwargs)
+    upload_avatar_form = upload_form(user=obj, **kwargs)
     primary_avatar_form = primary_form(
-        request.POST or None, obj=obj, avatars=avatars, **kwargs
+        request.POST or None, user=obj, avatars=avatars, **kwargs
     )
     if request.method == "POST":
         updated = False
@@ -226,7 +226,7 @@ def delete(
     obj = _resolve_object(request, app_label, model_name, object_pk)
     avatar, avatars = _get_avatars(obj)
     delete_avatar_form = DeleteAvatarForm(
-        request.POST or None, obj=obj, avatars=avatars
+        request.POST or None, user=obj, avatars=avatars
     )
     if request.method == "POST":
         if delete_avatar_form.is_valid():
