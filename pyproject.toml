@@ -9,24 +9,24 @@ authors = [{email = "floguy@gmail.com", name = "Eric Florenzano"}]
 maintainers = [{email = "johannes@fiduswriter.org", name = "Johannes Wilm"}]
 license = {text = "BSD-4-Clause"}
 readme = "README.rst"
+requires-python = ">=3.11"
 keywords=["avatar", "django"]
 classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Web Environment",
         "Intended Audience :: Developers",
         "Framework :: Django",
-        "Framework :: Django :: 4.2",
-        "Framework :: Django :: 5.0",
         "Framework :: Django :: 5.2",
         "Framework :: Django :: 6.0",
+        "Framework :: Django :: 6.1",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
+        "Programming Language :: Python :: 3.15",
     ]
 dynamic = ["version", "dependencies"]
 

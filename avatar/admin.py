@@ -31,7 +31,6 @@ class AvatarAdmin(admin.ModelAdmin):
         return render_to_string("avatar/avatar_tag.html", context)
 
     get_avatar.short_description = _("Avatar")
-    get_avatar.allow_tags = True
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

@@ -10,6 +10,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.files import File
 from django.core.files.base import ContentFile
+from django.core.files.storage import storages
 from django.db import models
 from django.db.models import signals
 from django.utils.encoding import force_bytes
@@ -26,14 +27,7 @@ from avatar.utils import (
     is_object_instance,
 )
 
-try:  # Django 4.2+
-    from django.core.files.storage import storages
-
-    avatar_storage = storages[settings.AVATAR_STORAGE_ALIAS]
-except ImportError:
-    from django.core.files.storage import get_storage_class
-
-    avatar_storage = get_storage_class(settings.AVATAR_STORAGE)()
+avatar_storage = storages[settings.AVATAR_STORAGE_ALIAS]
 
 
 def avatar_path_handler(
