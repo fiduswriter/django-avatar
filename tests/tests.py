@@ -217,6 +217,19 @@ class AvatarTests(TestCase):
         self.assertEqual(receiver.sender, Avatar)
         self.assertEqual(receiver.signal_sent_count, 1)
 
+    def test_delete_avatar_without_resized_directory(self):
+        self.test_normal_image_upload()
+        avatar = Avatar.objects.get(user=self.user)
+        resized_path = os.path.join(
+            self.testmediapath,
+            os.path.dirname(avatar.avatar.name),
+            "resized",
+        )
+        if os.path.exists(resized_path):
+            rmtree(resized_path)
+        avatar.delete()
+        self.assertEqual(Avatar.objects.filter(user=self.user).count(), 0)
+
     def test_delete_primary_avatar_and_new_primary(self):
         self.test_there_can_be_only_one_primary_avatar()
         primary = get_primary_avatar(self.user)
