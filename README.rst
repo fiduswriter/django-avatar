@@ -30,3 +30,11 @@ Django-avatar automatically generates thumbnails and stores them to your default
 file storage backend for retrieval later.
 
 For more information see the documentation at https://django-avatar.readthedocs.org/
+
+License
+-------
+
+django-avatar is licensed under the GNU Lesser General Public License
+version 3 or later (LGPL-3.0-or-later). Code first contributed under the
+original BSD-4-Clause license (up to version 9.0.1) remains available
+under those terms as well; see ``LICENSE.txt`` for details.

@@ -9,6 +9,9 @@ Changelog
     * Changed: When the primary avatar of a user is deleted, the new primary avatar is selected by date of upload, consistent with the fallback behavior of ``get_primary_avatar``.
     * Support: Dropped Django 4.2 support (end of life April 2026), added Django 6.1 support; Django 6.0 remains supported while it is in its extended support period (until April 2027). Dropped Python 3.10 support (end of life October 2026), added Python 3.15 support; Python 3.11 is kept as the floor while it receives security fixes (until October 2027). The package now declares ``requires-python >= 3.11`` and raised its dependency floors (Django, Pillow, django-appconf, dnspython).
     * Modernized for the supported versions: Django's ``storages`` API is used unconditionally (the pre-Django-4.2 ``get_storage_class`` fallback was removed), the deprecated ``DEFAULT_FILE_STORAGE`` settings fallback was dropped, the long-obsolete ``allow_tags`` admin attribute was removed, LibRavatar SRV lookups use ``dns.resolver.resolve`` instead of the deprecated ``dns.resolver.query``, and the documentation version is now read from the package instead of a stale hardcode.
+    * Relicensing: django-avatar is now licensed under the LGPL version 3 or later (LGPL-3.0-or-later). Code first contributed under the original BSD-4-Clause license (up to version 9.0.1) remains available under those terms; see ``LICENSE.txt``.
+    * The project moved from Jazzband to https://github.com/fiduswriter/django-avatar; all remaining references to the old home were removed.
+    * New contribution policy for AI-assisted pull requests (see ``CONTRIBUTING.md``).
 
 * 9.0.0
     * Fix files not closed in `create_thumbnail`
